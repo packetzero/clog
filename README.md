@@ -34,26 +34,6 @@ int run()
 }
 ```
 
-# Setup - Module IDs
-Define your module IDs in an enum, with the values explicitly set, like so:
-```
-enum MyModules {
-  ModMain = 1,
-  ModHttp = 2,
-  ModConfig = 3,
-  ModCount
-};
-```
-
-# Setup - File IDs
-For rehydration to work, every file requires a LOCAL_CLOG_FILEID define, with a unique uint64 hex value.
-```
-#include "modules.h"
-#define LOCAL_CLOG_FILEID 0x2000
-#include <clog.h>
-```
-
-
 ## Example Output - Compiled without NDEBUG defined
 
 ```
@@ -97,4 +77,23 @@ $ ./build/demor V | ruby ./build/rehydrate.rb
 2018-04-05 18:08:32.899244-0500 W ModHttp P:42499 T:53c0 "oops bad assumption" Error:33 [http.cpp:10]
 2018-04-05 18:08:32.899249-0500 T ModHttp P:42499 T:53c0 "run() exit" 1 [http.cpp:12]
 2018-04-05 18:08:32.899253-0500 D ModMain P:42499 T:53c0 "exit" 1 [main.cpp:39]
+```
+
+## Setup - Module IDs
+Define your module IDs in an enum, with the values explicitly set, like so:
+```
+enum MyModules {
+  ModMain = 1,
+  ModHttp = 2,
+  ModConfig = 3,
+  ModCount
+};
+```
+
+## Setup - File IDs
+For rehydration to work, every file requires a LOCAL_CLOG_FILEID define, with a unique uint64 hex value.
+```
+#include "modules.h"
+#define LOCAL_CLOG_FILEID 0x2000
+#include <clog.h>
 ```
