@@ -40,12 +40,17 @@ int run()
 
 You don't need your release code to contain large strings used for debugging context, `__FILE__` paths, or module names specific to your application.  Those all get dropped on the floor during compilation when NDEBUG is defined.  Provided in this project are some ruby scripts that can be used during the build to extract this information from your .cpp, .cc, .mm files and generate a rehydrate.rb.  The rehydrate.rb file processes release logs to fill in all of the missing information, making release logs every bit as useful as debug logs.  See the example below.
 
-## Example Output - Compiled without NDEBUG defined
+## Building simple demo
 
 ```
 $ cd demo
 $ sh build.sh
+```
 
+## Example Output - Compiled without NDEBUG defined
+Basic non-release format is:
+**TimestampString Level ModuleName ProcessId ThreadId HIDDEN_CONTEXT Message [`__FILE__`:`__LINE__` ]**
+```
 $ ./build/demod V
 2018-04-05 17:55:33.638097-0500 V ModMain  P:42430 T:53c0 "Using arg as loglevels" V [main.cpp:31]
 2018-04-05 17:55:33.638895-0500 T ModHttp  P:42430 T:53c0 "run() enter"  [http.cpp:8]
@@ -54,6 +59,7 @@ $ ./build/demod V
 2018-04-05 17:55:33.638931-0500 D ModMain  P:42430 T:53c0 "exit" 1 [main.cpp:39]
 ```
 ## Example Output - Compiled with NDEBUG
+Basic NDEBUG format is: **Timestamp Level ModuleId ProcessId ThreadId Message**
 ```
 # release compiled demo - defaults to WARN level
 $ ./build/demor
