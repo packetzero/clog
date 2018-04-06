@@ -91,9 +91,10 @@ class RawLogParser
       tmp = @strings.lookupLogSym key,levelChar
       unless tmp.nil?
         sym = tmp[4]
-        filename=File.basename(tmp[5]) rescue tmp[5]
+        filename=tmp[5] #File.basename(tmp[5]) rescue tmp[5]
         fileId,lineNum = key.split(':')
         extra = "[#{filename}:#{lineNum}]"
+        sym = "\"#{sym}\"" if sym.length > 0
       end
 
       puts "#{format_timestamp(ts)} #{levelChar} #{mod} #{pid} #{tid} #{sym} #{msg} #{extra}"

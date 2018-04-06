@@ -5,6 +5,7 @@ Your application can override to send to STDERR, or anywhere you would like.
 
 Features:
  - Avoid leaving `__FILE__` strings in release code (NDEBUG defined).
+ - Trims `__FILE__` when absolute path used by CMake
  - Ability to set level (DEBUG, WARN, etc) for up to 64 different parts of an application
  - Avoid building strings when log level will prevent output. E.g. `if (isEnabled(DEBUG)) log(fmt,a,b,c)`
  - No need to compile-out DEBUG logging, use string hiding for developer context.

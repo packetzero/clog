@@ -48,6 +48,8 @@ class SourceGrepParser
     sym = sym.strip
     return if sym.length <= 1   # signifies 'no symbol'
 
+    sym = sym[1..-2] if sym[0] == '"'
+
     fileid = @currentFileId
     @zlogsyms.push "L,#{fileid},#{linenum},#{levelChar},\"#{sym.strip}\",#{filename}"
   end
@@ -126,7 +128,10 @@ rawresults = find_grep(".", [".cpp",".cc", ".mm"], "CLOG_" )
     filename,linenum,sourceline = line.split(':',3)
     next if sourceline.nil?
 
-    filename = filename.strip.gsub(/^\.\//,"")
+    if filename.start_with?("./")
+      filename = filename[2..-1]
+      #filename = filename.strip.gsub(/^\.\//,"")
+    end
 
     if sourceline.include? "LOCAL_CLOG_FILEID"
       parser.handle_fileid_line filename, linenum, sourceline

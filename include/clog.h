@@ -5,12 +5,47 @@
 #include <stdint.h>
 #include <string>
 
-#include "clog_defs.h"
+enum CLogLevels {
+  CLL_NONE    = 0,
+  CLL_FATAL   = 1,
+  CLL_ERROR   = 2,
+  CLL_WARN    = 3,
+  CLL_INFO    = 4,
+  CLL_DEBUG   = 5,
+  CLL_TRACE   = 6,
+  CLL_VERBOSE = 7,
+  CLL_COUNT
+};
+
+/*
+ * Use these convenience aliases, instead of CLOG_LOG()
+ */
+#define CLOG_FATAL(MODULEID,HIDDENMSG,...) CLOG_LOG(MODULEID,CLL_FATAL,HIDDENMSG, __VA_ARGS__)
+#define CLOG_ERR(MODULEID,HIDDENMSG,...) CLOG_LOG(MODULEID,CLL_ERROR,HIDDENMSG, __VA_ARGS__)
+#define CLOG_WARN(MODULEID,HIDDENMSG,...) CLOG_LOG(MODULEID,CLL_WARN,HIDDENMSG, __VA_ARGS__)
+#define CLOG_INFO(MODULEID,HIDDENMSG,...) CLOG_LOG(MODULEID,CLL_INFO,HIDDENMSG, __VA_ARGS__)
+#define CLOG_DBG(MODULEID,HIDDENMSG,...) CLOG_LOG(MODULEID,CLL_DEBUG,HIDDENMSG, __VA_ARGS__)
+#define CLOG_TRACE(MODULEID,HIDDENMSG,...) CLOG_LOG(MODULEID,CLL_TRACE,HIDDENMSG, __VA_ARGS__)
+#define CLOG_VERBOSE(MODULEID,HIDDENMSG,...) CLOG_LOG(MODULEID,CLL_VERBOSE,HIDDENMSG, __VA_ARGS__)
+#define CLOG_DEBUG CLOG_DBG
+#define CLOG_ERROR CLOG_ERR
+
+/*
+ * Override default level at compile-time, set CFLAGS="-DCLL_DEFAULT=CLL_INFO"
+ */
 
 #ifndef CLL_DEFAULT
 #define CLL_DEFAULT CLL_WARN
 #endif
 
+/*
+ * At the top of each .cpp file using logging, define a LOCAL_CLOG_FILEID
+ * with a unique hex value (uint64_t).  This number is output in release
+ * logging lines, and used for matching to file name in rehydration.
+ *
+ * Example:
+ * #define LOCAL_CLOG_FILEID 0x12345678
+ */
 #ifdef LOCAL_CLOG_FILEID
 #define CLOG_FILEID LOCAL_CLOG_FILEID
 #else
@@ -18,13 +53,13 @@
 #define CLOG_FILEID 0
 #endif
 
-#define CLOG_ENABLED(PTR_OR_MODULEID,LEVEL) CLog::isEnabled((int)PTR_OR_MODULEID, LEVEL)
+#define CLOG_ENABLED(MODULEID,LEVEL) CLog::isEnabled((int)MODULEID, LEVEL)
 
-// hidden strings are inline when _DEBUG is defined
+// When NDEBUG is defined, __FILE__ and HIDDENMSG are passed to ::log().
 #ifndef NDEBUG
-  #define CLOG_LOG(PTR_OR_MODULEID,LEVEL,HIDDENMSG,...) if (CLog::isEnabled(PTR_OR_MODULEID,LEVEL)) CLog::log(PTR_OR_MODULEID, LEVEL, CLOG_FILEID, __LINE__, __FILE__, #HIDDENMSG, CLog::render(__VA_ARGS__))
+  #define CLOG_LOG(MODULEID,LEVEL,HIDDENMSG,...) if (CLog::isEnabled(MODULEID,LEVEL)) CLog::log(MODULEID, LEVEL, CLOG_FILEID, __LINE__, __FILE__, #HIDDENMSG, CLog::render(__VA_ARGS__))
 #else
-  #define CLOG_LOG(PTR_OR_MODULEID,LEVEL,HIDDENMSG,...) if (CLog::isEnabled(PTR_OR_MODULEID,LEVEL)) CLog::log(PTR_OR_MODULEID, LEVEL, CLOG_FILEID, __LINE__, "", "", CLog::render(__VA_ARGS__))
+  #define CLOG_LOG(MODULEID,LEVEL,HIDDENMSG,...) if (CLog::isEnabled(MODULEID,LEVEL)) CLog::log(MODULEID, LEVEL, CLOG_FILEID, __LINE__, "", "", CLog::render(__VA_ARGS__))
 #endif // _DEBUG
 
 #ifdef WIN32
@@ -37,6 +72,14 @@
 #include <pthread.h>
 #define LINEENDING "\n"
 #endif
+
+/*
+ * Optional: implement the CLogApp interface and pass instance to
+ * CLog::setApp() to add more control.
+ * At a minimum, you will want to implement getModuleName() for use
+ * when logging NDEBUG is not defined.  Otherwise, the logs will only
+ * contain module ids.
+ */
 
 struct CLogApp {
   /*
@@ -54,8 +97,94 @@ struct CLogApp {
 
 class CLog {
 public:
+  /*
+   * Optionally implement CLogApp and call setApp to provide
+   * more output control, and getModuleName().
+   */
+  static void setApp(CLogApp* ptr) {
+    State &_state = getState();
+    _state.app = ptr;
+  }
 
-  static void log(int moduleId, int level, uint64_t fileId, uint32_t lineNum, const std::string file, const std::string hiddenMsg, const std::string msg) {
+  /*
+   * Set the default level, as well as individual module levels
+   * using a comma-delimited string.
+   *
+   * Examples:
+   *  "2:D,4:I"    // sets module 2 to CLL_DEBUG, module 4 to CLL_INFO
+   *  "V"          // same as setDefaultLevel(CLL_VERBOSE)
+   *
+   * @returns 0 on success, or index of error
+   */
+  static int setLevels(const std::string val) {
+    State &_state = getState();
+    const char *end = val.c_str() + val.length();
+    const char *p = val.c_str();
+    while (p < end) {
+      const char *colon = p + 1;
+      while (colon < end && *colon != ':' && *colon != ',') colon++;
+      if (*colon == ',' || colon >= end) {
+        // special case, specifying default level
+        int level = *p;
+        setDefaultLevel(level);
+        p = colon + 1;
+        continue;
+      }
+
+      std::string modIdStr = std::string(p, colon);
+      int moduleId = atoi(modIdStr.c_str());
+      if (moduleId < 0 || moduleId >= 64) return (int)(p - val.c_str());
+
+      p = colon + 1;
+      int level = levelForChar(*p);
+
+      setModuleLevel(level, moduleId);
+
+      // advance
+      while (p < end && *p != ',') p++;
+      p++;
+    }
+
+    return 0;
+  }
+
+  /*
+   * set level for specific module at runtime.
+   */
+  static void setModuleLevel(int level, int moduleId) {
+    State &_state = getState();
+    if (moduleId < 0 || moduleId >= 64) return;
+    if (level < 0 || level >= CLL_COUNT) return;
+    _state.moduleLevels[moduleId] = level;
+  }
+
+  /*
+   * set level for all modules at runtime.
+   */
+  static void setDefaultLevel(int level) {
+    State &_state = getState();
+    for (int i=0; i < 64; i++) {
+      _state.moduleLevels[i] = level;
+    }
+  }
+
+  /*
+   * Don't call this directly.  Use the CLOG_ERROR(), etc. macros.
+   * If setApp() was called to provide a CLogApp instance, and
+   * the getDest() returns a value > 2, then CLogApp->onLogLine() will
+   * be called with the final string.  Otherwise, the log line will
+   * be output to stdout or stderr as indicated.
+   *
+   * @param moduleId
+   * @param level
+   * @param fileId  Resolves to LOCAL_CLOG_FILEID defined in each file.
+   * @param lineNum __LINE__ macro value.
+   * @param file    When NDEBUG is not defined, this is __FILE__ value.
+   * @param hiddenMsg The second parameter to CLOG_ERROR(), etc. macro.
+   * @param msg     The sprintf'ed (FMT,...) value.
+   */
+  static void log(int moduleId, int level, uint64_t fileId, uint32_t lineNum,
+                  const std::string file, const std::string hiddenMsg, const std::string msg) {
     State &_state = getState();
 
     std::string extra = "";
@@ -65,15 +194,17 @@ public:
     uint64_t threadId = (uint64_t)GetCurrentThreadId();
 #else
     uint64_t threadId = (uint64_t)pthread_self();
-    if (filename.length() > 0) {
+
+    // CMake will use full path name... strip to just filename
+    if (filename.length() > 0 && filename[0] == '/') {
       filename = std::string(basename((char *)filename.c_str()));
     }
 #endif
 
     char labelId[64]="";
     char moduleStr[64]="";
-    if (file.length() > 0 && _state.backend != 0L) {
-      snprintf(moduleStr,sizeof(moduleStr),"%s", _state.backend->getModuleName(moduleId).c_str());
+    if (file.length() > 0 && _state.app != 0L) {
+      snprintf(moduleStr,sizeof(moduleStr),"%s", _state.app->getModuleName(moduleId).c_str());
       snprintf(labelId,sizeof(labelId),":%d", lineNum);
       extra = " [" + filename + std::string(labelId) + "]";
       labelId[0] = 0;
@@ -109,9 +240,11 @@ public:
       return;
     }
 
+    // determine destination
+
     FILE *outfile = stdout;
-    if (_state.backend != 0L) {
-      switch(_state.backend->getDest()) {
+    if (_state.app != 0L) {
+      switch(_state.app->getDest()) {
         case 1: outfile = stdout; break;
         case 2: outfile = stderr; break;
         default:
@@ -120,25 +253,26 @@ public:
     }
 
     if (NULL == outfile) {
-      _state.backend->onLogLine(entryStr, entryLen);
+      _state.app->onLogLine(entryStr, entryLen);
     } else {
       fputs(entryStr, outfile);
       fflush(outfile);
     }
 
-    free(entryStr);
+    free(entryStr);  // asprintf malloc'ed
   }
 
+  /*
+   * don't call directly. Used in CLOG_XX macros
+   */
   static bool isEnabled(int moduleId, int level) {
     State &_state = getState();
     return (_state.moduleLevels[moduleId] >= level);
   }
 
-  static void setApp(CLogApp* ptr) {
-    State &_state = getState();
-    _state.backend = ptr;
-  }
-
+  /*
+   * Render the FMT,.. args into a string
+   */
   static std::string render(const char *fmt, ...) {
     va_list va_args;
     va_start(va_args, fmt);
@@ -150,77 +284,35 @@ public:
     vsnprintf(temp, length + 1, fmt, va_args);
     va_end(va_args);
 
-    return std::string(temp);
-  }
-
-  static void setModuleLevel(int level, int moduleId) {
-    State &_state = getState();
-    if (moduleId < 0 || moduleId >= 64) return;
-    if (level < 0 || level >= CLL_COUNT) return;
-    _state.moduleLevels[moduleId] = level;
-  }
-
-  static void setDefaultLevel(int level) {
-    State &_state = getState();
-    for (int i=0; i < 64; i++) {
-      _state.moduleLevels[i] = level;
-    }
-  }
-
-  // Examples:
-  // "2:D,4:I"    // sets module 2 to CLL_DEBUG, module 4 to CLL_INFO
-  // return 0 on success, or index of error
-  static int setLevels(const std::string val) {
-    State &_state = getState();
-    const char *end = val.c_str() + val.length();
-    const char *p = val.c_str();
-    while (p < end) {
-      const char *colon = p + 1;
-      while (colon < end && *colon != ':' && *colon != ',') colon++;
-      //if (colon >= end) return (int)(end - val.c_str());
-      if (*colon == ',' || colon >= end) {
-        // special case, specifying default level
-        int level = *p;
-        setDefaultLevel(level);
-        p = colon + 1;
-        continue;
-      }
-
-      std::string modIdStr = std::string(p, colon);
-      int moduleId = atoi(modIdStr.c_str());
-      if (moduleId < 0 || moduleId >= 64) return (int)(p - val.c_str());
-
-      p = colon + 1;
-      int level = levelForChar(*p);
-
-      setModuleLevel(level, moduleId);
-
-      // advance
-      while (p < end && *p != ',') p++;
-      p++;
-    }
-
-    return 0;
+    std::string retval = std::string(temp);
+    delete [] temp;
+    return retval;
   }
 
 private:
 
+  /*
+   * State class contains all CLog static variable info.
+   */
   struct State {
     State() {
-      backend = 0L;
-      pid = getpid();
+      app = 0L;
+      pid = getpid(); // TODO: windows
       for (int i=0; i < 64; i++) moduleLevels[i] = CLL_DEFAULT;
     }
     char      moduleLevels[64];
-    CLogApp * backend;
+    CLogApp * app;
     uint32_t  pid;
   };
 
   static State& getState() {
+    // Static variable instance in function for header-only implementation,
+    // in lieu of static class variables.
     static State _s = State();
     return _s;
   }
 
+  // Returns hundred-nano timestamp
   static uint64_t getTime() {
 #ifdef WIN32
     	FILETIME ft;
@@ -239,11 +331,6 @@ private:
 #endif
   }
 
-  //--------------------------------------------------------------
-  // Convenience method that returns 'E' for LVL_ERROR, 'T' for
-  // LVL_TRACE, etc.
-  // returns '?' if unknown
-  //--------------------------------------------------------------
   static char levelChar(int level)
   {
     switch (level) {

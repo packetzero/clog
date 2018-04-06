@@ -13,6 +13,7 @@ struct MyLogAppInfo : public CLogApp {
       case ModMain: return "ModMain";
       case ModHttp: return "ModHttp";
       case ModConfig: return "ModConfig";
+      case ModMisc: return "ModMisc";
       default:
       break;
     }
@@ -24,7 +25,6 @@ int main(int argc, char *argv[])
 {
   MyLogAppInfo clogAppInfo = MyLogAppInfo();
   CLog::setApp(&clogAppInfo);
-  CLog::setDefaultLevel(CLL_INFO);
 
   if (argc > 1) {
     int errIndex = CLog::setLevels(argv[1]);
@@ -35,6 +35,9 @@ int main(int argc, char *argv[])
   }
 
   int status = run();
+
+  extern void do_some_stuff(int a, double b, bool c);
+  do_some_stuff(time(NULL) % 1000, 3.234, false);
 
   CLOG_DBG(ModMain, "exit","%d", status);
 
