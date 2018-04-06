@@ -1,4 +1,7 @@
 #!/usr/bin/ruby
+#
+# Copyright 2018-present Alex Malone, Ziften Technologies, Inc. All Rights Reserved.
+# Apache-2 license.
 
 require "date"
 require 'find'

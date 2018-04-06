@@ -1,4 +1,8 @@
-# build-deobs-ruby.sh will prepend data/embedded_strings.rb with this file
+# clog_build_rehydrate.rb will prepend strings.csv with this file
+#
+# Copyright 2018-present Alex Malone, Ziften Technologies, Inc. All Rights Reserved.
+# Apache-2 license.
+
 require "csv"
 
 class LogStringParser

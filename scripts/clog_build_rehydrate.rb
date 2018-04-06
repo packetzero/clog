@@ -1,3 +1,6 @@
+# Copyright 2018-present Alex Malone, Ziften Technologies, Inc. All Rights Reserved.
+# Apache-2 license.
+
 f = STDOUT
 f.puts "#!/usr/bin/ruby"
 f.puts  "STRINGS_FILE_CONTENTS=<<-EOS321"

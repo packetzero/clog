@@ -1,3 +1,7 @@
+/*
+ * Copyright 2018-present Alex Malone, Ziften Technologies, Inc. All Rights Reserved.
+ * Apache-2 license.
+ */
 #ifndef _CLOG_BASIC_H_
 #define _CLOG_BASIC_H_
 

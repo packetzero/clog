@@ -1,6 +1,6 @@
 # C++ Logging with per-module levels and string hiding for release-mode
 
-This is a single-file C++ header-only library (clog.h).  By default, output goes to STDOUT.
+This is a single-file C++ header-only library [clog.h](./include/clog.h).  By default, output goes to STDOUT.
 Your application can override to send to STDERR, or anywhere you would like.
 If you have ever ifdef'ed logging to add/remove statements between release and debug builds, but wished there was a better way, read on...
 
@@ -35,6 +35,10 @@ int run()
   return retval;
 }
 ```
+
+## Rehydration
+
+You don't need your release code to contain large strings used for debugging context, `__FILE__` paths, or module names specific to your application.  Those all get dropped on the floor during compilation when NDEBUG is defined.  Provided in this project are some ruby scripts that can be used during the build to extract this information from your .cpp, .cc, .mm files and generate a rehydrate.rb.  The rehydrate.rb file processes release logs to fill in all of the missing information, making release logs every bit as useful as debug logs.  See the example below.
 
 ## Example Output - Compiled without NDEBUG defined
 
