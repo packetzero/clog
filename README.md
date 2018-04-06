@@ -1,7 +1,8 @@
-# C++ Logging With Per-Module levels and string hiding
+# C++ Logging with per-module levels and string hiding for release-mode
 
-This is a C++ header-only library.  By default, output goes to STDOUT.
+This is a single-file C++ header-only library (clog.h).  By default, output goes to STDOUT.
 Your application can override to send to STDERR, or anywhere you would like.
+If you have ever ifdef'ed logging to add/remove statements between release and debug builds, but wished there was a better way, read on...
 
 Features:
  - Avoid leaving `__FILE__` strings in release code (NDEBUG defined).
