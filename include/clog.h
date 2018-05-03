@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string>
+#include <map>
 
 enum CLogLevels {
   CLL_NONE    = 0,
@@ -82,10 +83,13 @@ enum CLogLevels {
 /*
  * Optional: implement the CLogApp interface and pass instance to
  * CLog::setApp() to add more control.
- * At a minimum, you will want to implement getModuleName() for use
+ * At a minimum, you will want to implement getModuleNameMap() for use
  * when logging NDEBUG is not defined.  Otherwise, the logs will only
  * contain module ids.
  */
+
+typedef std::map<int,std::string> CLogModNameMap;
+typedef std::map<int,std::string>::const_iterator CLogModNameMapIter;
 
 struct CLogApp {
 
@@ -93,10 +97,12 @@ struct CLogApp {
    * A way to detect and manage future versions
    */
   virtual int getVersion() { return 1; }
+
   /*
-   * return an application specific name for module
+   * return an application specific module ids and their names.
+   * module ids MUST be > 0.
    */
-  virtual std::string getModuleName(int moduleId) = 0;
+  virtual const CLogModNameMap& getModuleNameMap() = 0;
 
   /*
    * return STDOUT, STDERR, or other, causing onLogLine() to be called
@@ -121,11 +127,18 @@ class CLog {
 public:
   /*
    * Optionally implement CLogApp and call setApp to provide
-   * more output control, and getModuleName().
+   * more output control, and getModuleNameMap().
    */
   static void setApp(CLogApp* ptr) {
     State &_state = getState();
     _state.app = ptr;
+  }
+
+  static std::string _parseError(uint64_t offset, std::string msg, std::string item)
+  {
+    char buf[256];
+    snprintf(buf,sizeof(buf),"CLog::setLevels() parse error at %d. %s : '%s'", (int)offset, msg.c_str(), item.c_str());
+    return buf;
   }
 
   /*
@@ -136,29 +149,62 @@ public:
    *  "2:D,4:I"    // sets module 2 to CLL_DEBUG, module 4 to CLL_INFO
    *  "V"          // same as setDefaultLevel(CLL_VERBOSE)
    *
-   * @returns 0 on success, or index of error
+   * @returns Empty string on success, or parse rror message
    */
-  static int setLevels(const std::string val) {
+  static std::string setLevels(const std::string val) {
     State &_state = getState();
     const char *end = val.c_str() + val.length();
     const char *p = val.c_str();
+
+    const CLogModNameMap& _modNameMap = (_state.app ? _state.app->getModuleNameMap() : CLogModNameMap());
+
     while (p < end) {
       const char *colon = p + 1;
       while (colon < end && *colon != ':' && *colon != ',') colon++;
       if (*colon == ',' || colon >= end) {
         // special case, specifying default level
+
+        if ((colon-p) > 1) {
+          return _parseError((p - val.c_str()), "Invalid Level Char", std::string(p,colon));
+        }
+
         int level = levelForChar(*p);
+        if (level == CLL_NONE) {
+          return _parseError((p - val.c_str()), "Invalid Level Char", std::string(p,p+1));
+        }
         setDefaultLevel(level);
         p = colon + 1;
         continue;
       }
 
+
       std::string modIdStr = std::string(p, colon);
-      int moduleId = atoi(modIdStr.c_str());
-      if (moduleId < 0 || moduleId >= CLOG_MAX_MODULES) return (int)(p - val.c_str());
+      int moduleId = _getModuleIdFromName(_modNameMap, modIdStr);
+
+      // first try module name
+
+      if (moduleId < 0) {
+
+        // must be a module number
+
+        moduleId = atoi(modIdStr.c_str());
+
+        // check that the module number is in the map, or they probably made mistake
+
+        if (_modNameMap.size() > 0 && _getModuleName(_modNameMap, moduleId).length() == 0) {
+          return _parseError((p - val.c_str()), "Module Id not in map", modIdStr);
+        }
+      }
+
+      if (moduleId <= 0 || moduleId >= CLOG_MAX_MODULES) {
+        return _parseError((p - val.c_str()), "Unknown Module name or id", modIdStr);
+      }
 
       p = colon + 1;
       int level = levelForChar(*p);
+      if (level == CLL_NONE) {
+        return _parseError((p - val.c_str()), "Invalid Level Char", std::string(p,p+1));
+      }
 
       setModuleLevel(level, moduleId);
 
@@ -167,7 +213,7 @@ public:
       p++;
     }
 
-    return 0;
+    return "";
   }
 
   /*
@@ -188,6 +234,23 @@ public:
     for (int i=0; i < CLOG_MAX_MODULES; i++) {
       _state.moduleLevels[i] = level;
     }
+  }
+
+  static std::string _getModuleName(const CLogModNameMap &modNameMap, int moduleId) {
+    CLogModNameMapIter fit = modNameMap.find(moduleId);
+    if (fit != modNameMap.end()) {
+      return fit->second;
+    }
+    return "";
+  }
+
+  static int _getModuleIdFromName(const CLogModNameMap &modNameMap, std::string name) {
+    for (CLogModNameMapIter it = modNameMap.begin(); it != modNameMap.end(); it++) {
+      if (it->second == name) {
+        return it->first;
+      }
+    }
+    return -1;
   }
 
   /*
@@ -228,7 +291,7 @@ public:
     char labelId[64]="";
     char moduleStr[64]="";
     if (file.length() > 0 && _state.app != 0L) {
-      snprintf(moduleStr,sizeof(moduleStr),"%s", _state.app->getModuleName(moduleId).c_str());
+      snprintf(moduleStr,sizeof(moduleStr),"%s", _getModuleName(_state.app->getModuleNameMap(), moduleId).c_str());
       snprintf(labelId,sizeof(labelId),":%d", lineNum);
       extra = " [" + filename + std::string(labelId) + "]";
       labelId[0] = 0;
@@ -392,7 +455,7 @@ private:
     default:
       break;
   }
-  return CLL_INFO;
+  return CLL_NONE;
   }
 
 };

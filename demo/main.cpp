@@ -6,18 +6,16 @@ extern int run();
 
 struct MyLogAppInfo : public CLogApp {
   /*
-   * return an application specific name for module
+   * return an application specific id->name map.
    */
-  virtual std::string getModuleName(int moduleId) {
-    switch(moduleId) {
-      case ModMain: return "ModMain";
-      case ModHttp: return "ModHttp";
-      case ModConfig: return "ModConfig";
-      case ModMisc: return "ModMisc";
-      default:
-      break;
-    }
-    return "";
+  virtual const CLogModNameMap& getModuleNameMap() {
+    static CLogModNameMap _map = {    // static init like requires C++11
+      {ModMain,   "Main"},
+      {ModHttp,   "Http"},
+      {ModConfig, "Config"},
+      {ModMisc,   "Misc"},
+    };
+    return _map;
   }
 };
 
@@ -27,10 +25,10 @@ int main(int argc, char *argv[])
   CLog::setApp(&clogAppInfo);
 
   if (argc > 1) {
-    int errIndex = CLog::setLevels(argv[1]);
+    std::string parseErr = CLog::setLevels(argv[1]);
     CLOG_VERBOSE(ModMain, "Using arg as loglevels","%s", argv[1]);
-    if (errIndex != 0) {
-      CLOG_ERROR(ModConfig, "","Error in log level config setting at index %d", errIndex);
+    if (parseErr.length() > 0) {
+      CLOG_ERROR(ModConfig, "","%s", parseErr.c_str());
     }
   }
 

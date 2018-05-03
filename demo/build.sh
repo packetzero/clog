@@ -1,5 +1,7 @@
 CCFLAGS="-I../include"
 
+CCFLAGS+=" -std=c++11"
+
 # Uncomment this to compile-in a default level different than CLL_WARN
 #CCFLAGS+=" -DCLL_DEFAULT=CLL_DEBUG"
 
