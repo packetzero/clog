@@ -44,11 +44,18 @@ You don't need your release code to contain large strings used for debugging con
 
 Call `CLog::setLevels()` with a comma-delimited string of module:loglevel values, or just a loglevel to set across the board.  The value is processed in order from left to right, and modules can be specified using the id or name defined by your application.  The demo application takes the first command-line argument and passes it directly to setLevels(), and you can see some examples below.
 
-## Building simple demo
-
+## Building simple demo - MacOS or Linux
+Generates demo/build/demor, demo/build/demod, and demo/build/rehydrate.rb
 ```
 $ cd demo
 $ sh build.sh
+```
+
+## Building demo - Windows
+Generates demo/build/demor.exe, demo/build/demod.exe, and demo/build/rehydrate.rb
+```
+> cd demo
+> build.bat
 ```
 
 ## Example Output - Compiled without NDEBUG defined
