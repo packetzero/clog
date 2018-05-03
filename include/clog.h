@@ -21,6 +21,8 @@ enum CLogLevels {
   CLL_COUNT
 };
 
+#define CLOG_MAX_MODULES 64
+
 /*
  * Use these convenience aliases, instead of CLOG_LOG()
  */
@@ -86,6 +88,11 @@ enum CLogLevels {
  */
 
 struct CLogApp {
+
+  /*
+   * A way to detect and manage future versions
+   */
+  virtual int getVersion() { return 1; }
   /*
    * return an application specific name for module
    */
@@ -96,7 +103,18 @@ struct CLogApp {
    */
   virtual int getDest() { return 1; /* STDOUT */}
 
-  virtual void onLogLine(const char *str, int len) { }
+  /**
+   * Optionally, applications can receive onLogLine callbacks
+   * and output to desired destinations.  Sometimes a destination will
+   * have it's own timestamp, so timestampStr is separated from the rest of the
+   * log string.
+   *
+   * timestampStr null-terminated string formatted timestamp. Release is an
+   *              integer milliseconds, Debug is human-readable string.
+   * str          formatted log line string
+   * len          length in bytes of str.
+   */
+  virtual void onLogLine(const char *timestampStr, const char *str, int len) { }
 };
 
 class CLog {
@@ -129,7 +147,7 @@ public:
       while (colon < end && *colon != ':' && *colon != ',') colon++;
       if (*colon == ',' || colon >= end) {
         // special case, specifying default level
-        int level = *p;
+        int level = levelForChar(*p);
         setDefaultLevel(level);
         p = colon + 1;
         continue;
@@ -137,7 +155,7 @@ public:
 
       std::string modIdStr = std::string(p, colon);
       int moduleId = atoi(modIdStr.c_str());
-      if (moduleId < 0 || moduleId >= 64) return (int)(p - val.c_str());
+      if (moduleId < 0 || moduleId >= CLOG_MAX_MODULES) return (int)(p - val.c_str());
 
       p = colon + 1;
       int level = levelForChar(*p);
@@ -157,7 +175,7 @@ public:
    */
   static void setModuleLevel(int level, int moduleId) {
     State &_state = getState();
-    if (moduleId < 0 || moduleId >= 64) return;
+    if (moduleId < 0 || moduleId >= CLOG_MAX_MODULES) return;
     if (level < 0 || level >= CLL_COUNT) return;
     _state.moduleLevels[moduleId] = level;
   }
@@ -167,7 +185,7 @@ public:
    */
   static void setDefaultLevel(int level) {
     State &_state = getState();
-    for (int i=0; i < 64; i++) {
+    for (int i=0; i < CLOG_MAX_MODULES; i++) {
       _state.moduleLevels[i] = level;
     }
   }
@@ -205,6 +223,8 @@ public:
     }
 #endif
 
+    // string for module (id or name) and label (fileid:line)
+
     char labelId[64]="";
     char moduleStr[64]="";
     if (file.length() > 0 && _state.app != 0L) {
@@ -217,28 +237,12 @@ public:
       snprintf(labelId,sizeof(labelId),"%llx:%d", fileId, lineNum);
     }
 
-    // int timestamp output in release, more fancy in debug
-    uint64_t ts = getTime();
     char timestamp[64]="";
-#ifndef NDEBUG
-#ifdef WIN32
-    snprintf(timestamp,sizeof(timestamp), "%lld", ts);
-#else
-    time_t now = (time_t)(ts / 10000000);
-    uint32_t subseconds = (ts % 10000000) / 10;
-    struct tm *tm = localtime(&now);
-    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S.", tm);
-    size_t tslen = strlen(timestamp);
-    snprintf(timestamp + tslen, sizeof(timestamp)-tslen,"%06d", subseconds);
-    strftime(timestamp + strlen(timestamp),6,  "%z", tm);
-#endif // WIN32
-#else
-    snprintf(timestamp,sizeof(timestamp), "%lld", ts);
-#endif
+    _formatTimestamp(timestamp, sizeof(timestamp), getTime());
 
     // put it all together
     char *entryStr=0L;
-    int entryLen = asprintf(&entryStr, "%s %c %s %s P:%05d T:%04x %s %s%s%s", timestamp, levelChar(level), moduleStr, labelId, _state.pid, (uint32_t)(0x0FFFF & threadId), (file.length() > 0 ? hiddenMsg.c_str() : ""), msg.c_str(), extra.c_str(), LINEENDING);
+    int entryLen = asprintf(&entryStr, " %c %s %s P:%05d T:%04x %s %s%s%s", levelChar(level), moduleStr, labelId, _state.pid, (uint32_t)(0x0FFFF & threadId), (file.length() > 0 ? hiddenMsg.c_str() : ""), msg.c_str(), extra.c_str(), LINEENDING);
     if (entryStr == 0L) {
       // malloc error
       return;
@@ -257,8 +261,9 @@ public:
     }
 
     if (NULL == outfile) {
-      _state.app->onLogLine(entryStr, entryLen);
+      _state.app->onLogLine(timestamp, entryStr, entryLen);
     } else {
+      fputs(timestamp, outfile);
       fputs(entryStr, outfile);
       fflush(outfile);
     }
@@ -299,14 +304,15 @@ private:
    * State class contains all CLog static variable info.
    */
   struct State {
-    State() {
+    State() : app(0L), version(1) {
       app = 0L;
       pid = getpid(); // TODO: windows
-      for (int i=0; i < 64; i++) moduleLevels[i] = CLL_DEFAULT;
+      for (int i=0; i < CLOG_MAX_MODULES; i++) moduleLevels[i] = CLL_DEFAULT;
     }
-    char      moduleLevels[64];
     CLogApp * app;
+    int       version;
     uint32_t  pid;
+    char      moduleLevels[CLOG_MAX_MODULES];
   };
 
   static State& getState() {
@@ -332,6 +338,28 @@ private:
       gettimeofday(&tv,NULL);
       uint64_t micros = (1000000 * tv.tv_sec + tv.tv_usec);
       return micros * 10;
+#endif
+  }
+
+  /*
+   * int timestamp output in release, more fancy in debug
+   */
+  static void _formatTimestamp(char *dest, int destlen, uint64_t ts)
+  {
+#ifndef NDEBUG
+#ifdef WIN32
+    snprintf(dest,destlen, "%lld", ts);
+#else
+    time_t now = (time_t)(ts / 10000000);
+    uint32_t subseconds = (ts % 10000000) / 10;
+    struct tm *tm = localtime(&now);
+    strftime(dest, destlen, "%Y-%m-%d %H:%M:%S.", tm);
+    size_t tslen = strlen(dest);
+    snprintf(dest + tslen, destlen-tslen,"%06d", subseconds);
+    strftime(dest + strlen(dest),6,  "%z", tm);
+#endif // WIN32
+#else
+    snprintf(dest,destlen, "%lld", ts);
 #endif
   }
 
