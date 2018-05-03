@@ -69,9 +69,10 @@ enum CLogLevels {
   #define CLOG_LOG(MODULEID,LEVEL,HIDDENMSG,...) if (CLog::isEnabled(MODULEID,LEVEL)) CLog::log(MODULEID, LEVEL, CLOG_FILEID, __LINE__, "", "", CLog::render(__VA_ARGS__))
 #endif // _DEBUG
 
-#ifdef WIN32
+#ifdef _WIN32
 #define LINEENDING "\r\n"
 #include <Windows.h>
+#include <time.h>
 #else
 #include <libgen.h>
 #include <sys/time.h>
@@ -369,7 +370,11 @@ private:
   struct State {
     State() : app(0L), version(1) {
       app = 0L;
-      pid = getpid(); // TODO: windows
+#ifdef _WIN32
+      pid = GetCurrentProcessId();
+#else
+      pid = getpid();
+#endif
       for (int i=0; i < CLOG_MAX_MODULES; i++) moduleLevels[i] = CLL_DEFAULT;
     }
     CLogApp * app;
