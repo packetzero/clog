@@ -40,7 +40,7 @@ int run()
 
 You don't need your release code to contain large strings used for debugging context, `__FILE__` paths, or module names specific to your application.  Those all get dropped on the floor during compilation when NDEBUG is defined.  Provided in this project are some ruby scripts that can be used during the build to extract this information from your .cpp, .cc, .mm files and generate a rehydrate.rb.  The rehydrate.rb file processes release logs to fill in all of the missing information, making release logs every bit as useful as debug logs.  See the example below.
 
-# Configuration
+## Configuration
 
 Call `CLog::setLevels()` with a comma-delimited string of module:loglevel values, or just a loglevel to set across the board.  The value is processed in order from left to right, and modules can be specified using the id or name defined by your application.  The demo application takes the first command-line argument and passes it directly to setLevels(), and you can see some examples below.
 

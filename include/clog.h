@@ -305,12 +305,13 @@ public:
     _formatTimestamp(timestamp, sizeof(timestamp), getTime());
 
     // put it all together
-    char *entryStr=0L;
-    int entryLen = asprintf(&entryStr, " %c %s %s P:%05d T:%04x %s %s%s%s", levelChar(level), moduleStr, labelId, _state.pid, (uint32_t)(0x0FFFF & threadId), (file.length() > 0 ? hiddenMsg.c_str() : ""), msg.c_str(), extra.c_str(), LINEENDING);
+    int mallocSize=128 + msg.length() + filename.length() + extra.length() + hiddenMsg.length();
+    char *entryStr=(char *)malloc(mallocSize);
     if (entryStr == 0L) {
-      // malloc error
-      return;
+      return; // malloc error
     }
+
+    int entryLen = snprintf(entryStr, mallocSize, " %c %s %s P:%05d T:%04x %s %s%s%s", levelChar(level), moduleStr, labelId, _state.pid, (uint32_t)(0x0FFFF & threadId), (file.length() > 0 ? hiddenMsg.c_str() : ""), msg.c_str(), extra.c_str(), LINEENDING);
 
     // determine destination
 
@@ -332,7 +333,7 @@ public:
       fflush(outfile);
     }
 
-    free(entryStr);  // asprintf malloc'ed
+    free(entryStr);  // malloc'ed for sprintf
   }
 
   /*
