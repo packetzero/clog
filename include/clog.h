@@ -416,9 +416,6 @@ private:
   static void _formatTimestamp(char *dest, int destlen, uint64_t ts)
   {
 #ifndef NDEBUG
-#ifdef WIN32
-    snprintf(dest,destlen, "%lld", ts);
-#else
     time_t now = (time_t)(ts / 10000000);
     uint32_t subseconds = (ts % 10000000) / 10;
     struct tm *tm = localtime(&now);
@@ -426,7 +423,6 @@ private:
     size_t tslen = strlen(dest);
     snprintf(dest + tslen, destlen-tslen,"%06d", subseconds);
     strftime(dest + strlen(dest),6,  "%z", tm);
-#endif // WIN32
 #else
     snprintf(dest,destlen, "%lld", ts);
 #endif
